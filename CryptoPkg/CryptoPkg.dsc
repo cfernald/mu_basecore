@@ -213,13 +213,6 @@
   CryptoPkg/Library/BaseCryptLib/SmmCryptLib.inf
   CryptoPkg/Library/BaseCryptLibOnProtocolPpi/SmmCryptLib.inf
 # MU_CHANGE END
-
-[Components.X64, Components.IA32]
-  ## MU_CHANGE [BEGIN] Added unit-test application for the VerifyEKUsInPkcs7Signature() function.
-  # Currently this unit test doesn't work for AARCH64
-  CryptoPkg/UnitTests/VerifyPkcs7EkuUnitTestApp/VerifyPkcs7EkuUnitTestApp.inf
-  ## MU_CHANGE [END]
-
 !endif
 
 [Components.IA32, Components.X64] # MU_CHANGE remove ARM and AARCH64
