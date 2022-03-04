@@ -8,7 +8,7 @@
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 ##
 {
-  "scope": "global-disable",
+  "scope": "global-disabled",
   "type": "nuget",
   "name": "Mu-Basetools",
   "source": "https://api.nuget.org/v3/index.json",
