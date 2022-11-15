@@ -27,7 +27,7 @@
     .thumb
     .syntax unified
 
-    .type ASM_PFX(InternalMemScanMem8), %function
+    //.type ASM_PFX(InternalMemScanMem8), %function
 ASM_GLOBAL ASM_PFX(InternalMemScanMem8)
 ASM_PFX(InternalMemScanMem8):
     // r0 = start of memory to scan

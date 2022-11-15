@@ -32,12 +32,12 @@
         .macro          fn_start, name:req
         .section        .text.\name
         .globl          \name
-        .type           \name, %function
+        //.type           \name, %function
 \name\():
         .endm
 
         .macro          fn_end, name:req
-        .size           \name, . - \name
+        //.size           \name, . - \name
         .endm
 
         /*

@@ -8,7 +8,7 @@
     .thumb
     .syntax unified
     .align  5
-    .type   ASM_PFX(InternalMemCompareGuid), %function
+    //.type   ASM_PFX(InternalMemCompareGuid), %function
 ASM_GLOBAL ASM_PFX(InternalMemCompareGuid)
 ASM_PFX(InternalMemCompareGuid):
     push    {r4, lr}

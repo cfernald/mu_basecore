@@ -10,7 +10,7 @@
     .thumb
     .syntax unified
     .align  5
-    .type   ASM_PFX(InternalMemSetMem16), %function
+    //.type   ASM_PFX(InternalMemSetMem16), %function
 ASM_GLOBAL ASM_PFX(InternalMemSetMem16)
 ASM_PFX(InternalMemSetMem16):
     uxth    r2, r2
@@ -18,20 +18,20 @@ ASM_PFX(InternalMemSetMem16):
     orr     r2, r2, r2, lsl #16
     b       0f
 
-    .type   ASM_PFX(InternalMemSetMem32), %function
+    //.type   ASM_PFX(InternalMemSetMem32), %function
 ASM_GLOBAL ASM_PFX(InternalMemSetMem32)
 ASM_PFX(InternalMemSetMem32):
     lsl     r1, r1, #2
     b       0f
 
-    .type   ASM_PFX(InternalMemSetMem64), %function
+    //.type   ASM_PFX(InternalMemSetMem64), %function
 ASM_GLOBAL ASM_PFX(InternalMemSetMem64)
 ASM_PFX(InternalMemSetMem64):
     lsl     r1, r1, #3
     b       1f
 
     .align  5
-    .type   ASM_PFX(InternalMemSetMem), %function
+    //.type   ASM_PFX(InternalMemSetMem), %function
 ASM_GLOBAL ASM_PFX(InternalMemSetMem)
 ASM_PFX(InternalMemSetMem):
     uxtb    r2, r2
@@ -39,7 +39,7 @@ ASM_PFX(InternalMemSetMem):
     orr     r2, r2, r2, lsl #16
     b       0f
 
-    .type   ASM_PFX(InternalMemZeroMem), %function
+    //.type   ASM_PFX(InternalMemZeroMem), %function
 ASM_GLOBAL ASM_PFX(InternalMemZeroMem)
 ASM_PFX(InternalMemZeroMem):
     movs    r2, #0

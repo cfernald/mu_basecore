@@ -36,7 +36,7 @@ InternalMemCopyMem (
   IN      UINTN                     Length
   )
 **/
-    .type   ASM_PFX(InternalMemCopyMem), %function
+    //.type   ASM_PFX(InternalMemCopyMem), %function
 ASM_GLOBAL ASM_PFX(InternalMemCopyMem)
 ASM_PFX(InternalMemCopyMem):
     push    {r4-r11, lr}
