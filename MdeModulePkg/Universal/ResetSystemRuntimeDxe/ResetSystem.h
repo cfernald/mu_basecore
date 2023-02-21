@@ -45,6 +45,7 @@ typedef struct {
   UINT32                             Signature;
   EFI_RESET_NOTIFICATION_PROTOCOL    ResetNotification;
   LIST_ENTRY                         ResetNotifies;
+  BOOLEAN                            RuntimeCallbacks; // MU_CHANGE
 } RESET_NOTIFICATION_INSTANCE;
 #define RESET_NOTIFICATION_INSTANCE_SIGNATURE  SIGNATURE_32('r', 's', 't', 'i')
 #define RESET_NOTIFICATION_INSTANCE_FROM_THIS(a) \

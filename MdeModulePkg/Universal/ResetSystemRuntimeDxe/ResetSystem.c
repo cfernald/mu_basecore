@@ -18,6 +18,11 @@ GLOBAL_REMOVE_IF_UNREFERENCED CHAR16  *mResetTypeStr[] = {
 //
 UINTN  mResetNotifyDepth = 0;
 
+//
+// Event for the address change event.
+//
+EFI_EVENT  mAddressChangeEvent = NULL;
+
 /**
   Register a notification function to be called when ResetSystem() is called.
 
@@ -68,7 +73,12 @@ RegisterResetNotify (
   }
 
   ASSERT (IsNull (&Instance->ResetNotifies, Link));
-  Entry = AllocatePool (sizeof (*Entry));
+  if (!Instance->RuntimeCallbacks) {
+    Entry = AllocatePool (sizeof (*Entry));
+  } else {
+    Entry = AllocateRuntimePool(sizeof (*Entry));
+  }
+
   if (Entry == NULL) {
     return EFI_OUT_OF_RESOURCES;
   }
@@ -133,7 +143,8 @@ RESET_NOTIFICATION_INSTANCE  mResetNotification = {
     RegisterResetNotify,
     UnregisterResetNotify
   },
-  INITIALIZE_LIST_HEAD_VARIABLE (mResetNotification.ResetNotifies)
+  INITIALIZE_LIST_HEAD_VARIABLE (mResetNotification.ResetNotifies),
+  FALSE // MU_CHANGE
 };
 
 RESET_NOTIFICATION_INSTANCE  mPlatformSpecificResetFilter = {
@@ -142,7 +153,8 @@ RESET_NOTIFICATION_INSTANCE  mPlatformSpecificResetFilter = {
     RegisterResetNotify,
     UnregisterResetNotify
   },
-  INITIALIZE_LIST_HEAD_VARIABLE (mPlatformSpecificResetFilter.ResetNotifies)
+  INITIALIZE_LIST_HEAD_VARIABLE (mPlatformSpecificResetFilter.ResetNotifies),
+  FALSE // MU_CHANGE
 };
 
 RESET_NOTIFICATION_INSTANCE  mPlatformSpecificResetHandler = {
@@ -151,8 +163,65 @@ RESET_NOTIFICATION_INSTANCE  mPlatformSpecificResetHandler = {
     RegisterResetNotify,
     UnregisterResetNotify
   },
-  INITIALIZE_LIST_HEAD_VARIABLE (mPlatformSpecificResetHandler.ResetNotifies)
+  INITIALIZE_LIST_HEAD_VARIABLE (mPlatformSpecificResetHandler.ResetNotifies),
+  FALSE // MU_CHANGE
 };
+
+// MU_CHANGE START
+RESET_NOTIFICATION_INSTANCE  mPlatformSpecificRuntimeResetHandler = {
+  RESET_NOTIFICATION_INSTANCE_SIGNATURE,
+  {
+    RegisterResetNotify,
+    UnregisterResetNotify
+  },
+  INITIALIZE_LIST_HEAD_VARIABLE (mPlatformSpecificRuntimeResetHandler.ResetNotifies),
+  TRUE
+};
+
+VOID
+EFIAPI
+ResetSystemAddressChange (
+  IN EFI_EVENT  Event,
+  IN VOID       *Context
+  )
+{
+  LIST_ENTRY          *Link;
+  LIST_ENTRY          *PrevLink;
+  RESET_NOTIFY_ENTRY  *Entry;
+
+  //
+  // Fix up all the pointers for all of the callbacks.
+  //
+
+  for ( Link = GetFirstNode (&mPlatformSpecificRuntimeResetHandler.ResetNotifies)
+        ; !IsNull (&mPlatformSpecificRuntimeResetHandler.ResetNotifies, Link)
+        ; Link = GetNextNode (&mPlatformSpecificRuntimeResetHandler.ResetNotifies, Link)
+        )
+  {
+    Entry = RESET_NOTIFY_ENTRY_FROM_LINK (Link);
+    gRT->ConvertPointer (0, (VOID **)&Entry->ResetNotify);
+  }
+
+  //
+  // Fix the pointers in the linked list itself.
+  //
+
+  PrevLink = NULL;
+  for (Link = &mPlatformSpecificRuntimeResetHandler.ResetNotifies;
+       Link != &mPlatformSpecificRuntimeResetHandler.ResetNotifies;
+       PrevLink = Link, Link = Link->ForwardLink)
+  {
+    if (PrevLink != NULL) {
+      gRT->ConvertPointer (0, (VOID **)&PrevLink->ForwardLink);
+    }
+
+    gRT->ConvertPointer (0, (VOID **)&Link->BackLink);
+  }
+
+  gRT->ConvertPointer (0, (VOID **)&PrevLink->ForwardLink);
+}
+
+// MU_CHANGE END
 
 /**
   The driver's entry point.
@@ -200,9 +269,27 @@ InitializeResetSystem (
                   &mPlatformSpecificResetFilter.ResetNotification,
                   &gEdkiiPlatformSpecificResetHandlerProtocolGuid,
                   &mPlatformSpecificResetHandler.ResetNotification,
+                  &gEdkiiPlatformSpecificRuntimeResetHandlerProtocolGuid,
+                  &mPlatformSpecificRuntimeResetHandler.ResetNotification,
                   NULL
                   );
   ASSERT_EFI_ERROR (Status);
+
+  // MU_CHANGE START
+  //
+  // Register for the virtual address change event to fix up runtime pointers.
+  //
+
+  Status = gBS->CreateEventEx (
+                    EVT_NOTIFY_SIGNAL,
+                    TPL_NOTIFY,
+                    ResetSystemAddressChange,
+                    NULL,
+                    &gEfiEventVirtualAddressChangeGuid,
+                    &mAddressChangeEvent
+                    );
+  ASSERT_EFI_ERROR (Status);
+  // MU_CHANGE END
 
   return Status;
 }
@@ -292,6 +379,22 @@ RuntimeServiceResetSystem (
         Entry = RESET_NOTIFY_ENTRY_FROM_LINK (Link);
         Entry->ResetNotify (ResetType, ResetStatus, DataSize, ResetData);
       }
+      // MU_CHANGE START
+    } else {
+
+      //
+      // call runtime reset notification functions registered through the
+      // EDKII_PLATFORM_SPECIFIC_RUNTIME_RESET_HANDLER_PROTOCOL.
+      //
+      for ( Link = GetFirstNode (&mPlatformSpecificRuntimeResetHandler.ResetNotifies)
+            ; !IsNull (&mPlatformSpecificRuntimeResetHandler.ResetNotifies, Link)
+            ; Link = GetNextNode (&mPlatformSpecificRuntimeResetHandler.ResetNotifies, Link)
+            )
+      {
+        Entry = RESET_NOTIFY_ENTRY_FROM_LINK (Link);
+        Entry->ResetNotify (ResetType, ResetStatus, DataSize, ResetData);
+      }
+      // MU_CHANGE END
     }
   } else {
     ASSERT (ResetType < ARRAY_SIZE (mResetTypeStr));

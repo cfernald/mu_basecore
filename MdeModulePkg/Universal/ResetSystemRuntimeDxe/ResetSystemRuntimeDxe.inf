@@ -45,13 +45,14 @@
 
 [Guids]
   gEfiCapsuleVendorGuid                         ## SOMETIMES_CONSUMES   ## Variable:L"CapsuleUpdateData"
-
+  gEfiEventVirtualAddressChangeGuid             ## CONSUMES ## MU_CHANGE
 
 [Protocols]
   gEfiResetArchProtocolGuid                       ## PRODUCES
   gEfiResetNotificationProtocolGuid               ## PRODUCES
   gEdkiiPlatformSpecificResetFilterProtocolGuid   ## PRODUCES
   gEdkiiPlatformSpecificResetHandlerProtocolGuid  ## PRODUCES
+  gEdkiiPlatformSpecificRuntimeResetHandlerProtocolGuid ## PRODUCES ## MU_CHANGE
 
 [Depex]
   TRUE
