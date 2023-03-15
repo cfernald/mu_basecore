@@ -98,7 +98,7 @@ jobs:
     clean: all
 
   pool:
-    vmImage: 'windows-2022'
+    vmImage: 'windows-latest'
 
   steps:
-    - template: Steps/PrGate.yml@mu_devops
+    - template: Steps/PublishCodeCoverage.yml@mu_devops
