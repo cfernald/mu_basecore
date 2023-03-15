@@ -131,7 +131,6 @@ class HostBasedUnitTestRunner(IUefiBuildPlugin):
         coverageOutputBase = thebuilder.env.GetValue("COVERAGE_BUILD_DIR")
         buildOutputBase = thebuilder.env.GetValue("BUILD_OUTPUT_BASE")
         package = thebuilder.env.GetValue("PACKAGE_UNDER_TEST")
-        workspace = thebuilder.env.GetValue("WORKSPACE")
 
         if coverageOutputBase is None:
             logging.warning("Coverage build directory not specified! Coverage will only include unit test compiled code.")
@@ -155,28 +154,11 @@ class HostBasedUnitTestRunner(IUefiBuildPlugin):
             logging.error("UnitTest Coverage: Failed to aggregate coverage data.")
             return 1
 
-        # Filter out auto-generated and test code
-        ret = RunCmd("lcov_cobertura",f"{buildOutputBase}/total-coverage.info -o {buildOutputBase}/coverage.xml")
+        # Generate coverage file, filtering out auto-generated and test code
+        ret = RunCmd("lcov_cobertura",f"{buildOutputBase}/total-coverage.info -o {buildOutputBase}/{package}_coverage.xml --excludes *AutoGen.c,*UnitTest*,*HostTest*")
         if ret != 0:
             logging.error("UnitTest Coverage: Failed to generate coverage XML.")
-
             return 1
-
-        # Generate all coverage file
-        testCoverageList = glob.glob (f"{workspace}/Build/**/total-coverage.info", recursive=True)
-
-        coverageFile = ""
-        for testCoverage in testCoverageList:
-            coverageFile += " --add-tracefile " + testCoverage
-        ret = RunCmd("lcov", f"{coverageFile} --output-file {workspace}/Build/all-coverage.info --rc lcov_branch_coverage=1")
-        if ret != 0:
-            logging.error("UnitTest Coverage: Failed generate all coverage file.")
-            return 1
-
-        # Generate and XML file if requested.for all package
-        if os.path.isfile(f"{workspace}/Build/coverage.xml"):
-            os.remove(f"{workspace}/Build/coverage.xml")
-        ret = RunCmd("lcov_cobertura",f"{workspace}/Build/all-coverage.info -o {workspace}/Build/coverage.xml")
 
         return 0
 

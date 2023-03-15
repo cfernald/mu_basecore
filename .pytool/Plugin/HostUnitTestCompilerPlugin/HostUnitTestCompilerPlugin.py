@@ -139,7 +139,7 @@ class HostUnitTestCompilerPlugin(ICiBuildPlugin):
         uefiBuilder = UefiBuilder()
 
         # Set an environment variable for the runner to know the package under test.
-        environment.SetValue("PACKAGE_UNDER_TEST", packagename, "Set the package under test dfor host based tests")
+        environment.SetValue("PACKAGE_UNDER_TEST", packagename, "Set the package under test for host based tests")
 
         # do all the steps
         # WorkSpace, PackagesPath, PInHelper, PInManager
