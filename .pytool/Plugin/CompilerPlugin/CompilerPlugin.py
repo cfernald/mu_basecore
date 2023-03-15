@@ -57,18 +57,10 @@ class CompilerPlugin(ICiBuildPlugin):
 
         # MU_CHANGE START: Optimize to only build NOOPT when useful
         target_arch = environment.GetValue("TARGET_ARCH")
-        if environment.GetValue("TARGET") == "NOOPT":
-            if environment.GetValue("CODE_COVERAGE") != "TRUE":
-                print("LEEDLE 1")
-                tc.SetSkipped()
-                tc.LogStdError("Skipping NOOPT since code coverage is not enabled.")
-                return -1
-
-            if (target_arch == "ARM" or target_arch == "AARCH64") != (GetHostInfo().arch == "ARM"):
-                print("LEEDLE 2")
-                tc.SetSkipped()
-                tc.LogStdError("Skipping NOOPT since code coverage is not enabled.")
-                return -1
+        if environment.GetValue("TARGET") == "NOOPT" and target_arch != "X64":
+            tc.SetSkipped()
+            tc.LogStdError("Skipping NOOPT since code coverage is not enabled.")
+            return -1
 
         # MU_CHANGE END
 
