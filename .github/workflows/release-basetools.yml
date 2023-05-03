@@ -71,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: buildlog-${{ matrix.tool_chain }}-${{ matrix.target }}
-          path: BaseTools/BaseToolsBuild
+          path: BaseTools/BaseToolsBuild/BASETOOLS_BUILD.txt
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
