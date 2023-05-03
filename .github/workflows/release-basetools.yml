@@ -8,9 +8,9 @@
 name: Publish BaseTools
 
 on:
-  release:
-    types:
-      - published
+  push:
+    branches:
+      - basetools_pub
 
 jobs:
   build:
