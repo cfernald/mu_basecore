@@ -73,7 +73,7 @@ jobs:
           name: logs-${{ matrix.tool_chain }}-${{ matrix.target }}
           path: |
             Build/SETUPLOG.txt
-            Build/UPDATELOG.txt
+            Build/UPDATE_LOG.txt
             BaseTools/BaseToolsBuild/BASETOOLS_BUILD.txt
 
       - name: Upload Artifacts
