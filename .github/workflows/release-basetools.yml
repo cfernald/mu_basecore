@@ -66,12 +66,15 @@ jobs:
       - name: Build Base Tools
         run: python BaseTools/Edk2ToolsBuild.py -t ${{ matrix.tool_chain}} -a ${{ matrix.target }} --skip_path_env
 
-      - name: Upload Build Log
+      - name: Upload Build Logs
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: buildlog-${{ matrix.tool_chain }}-${{ matrix.target }}
-          path: BaseTools/BaseToolsBuild/BASETOOLS_BUILD.txt
+          name: logs-${{ matrix.tool_chain }}-${{ matrix.target }}
+          path: |
+            Build/SETUPLOG.txt
+            Build/UPDATELOG.txt
+            BaseTools/BaseToolsBuild/BASETOOLS_BUILD.txt
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
