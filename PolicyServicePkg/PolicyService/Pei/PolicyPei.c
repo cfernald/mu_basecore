@@ -9,10 +9,16 @@
 
 #include "PolicyPei.h"
 
+EFI_GUID  gPeiPolicyNotifyListPpiGuid = {
+  0x3f22d2a0, 0xb8f5, 0x47e4, { 0xb2, 0x84, 0x76, 0x5d, 0x2d, 0xbc, 0x40, 0xaf }
+};
+
 STATIC POLICY_PPI  mPolicyPpi = {
   PeiSetPolicy,
   PeiGetPolicy,
-  PeiRemovePolicy
+  PeiRemovePolicy,
+  PeiRegisterNotify,
+  PeiUnregisterNotify
 };
 
 STATIC EFI_PEI_PPI_DESCRIPTOR  PolicyPpiList = {
@@ -312,6 +318,28 @@ PeiRemovePolicy (
   }
 
   return Status;
+}
+
+EFI_STATUS
+EFIAPI
+PeiRegisterNotify (
+  IN CONST EFI_GUID           *PolicyGuid,
+  IN CONST UINT32             EventTypes,
+  IN CONST UINT32             Priority,
+  IN POLICY_HANDLER_CALLBACK  CallbackRoutine,
+  OUT VOID                    **Handle
+  )
+{
+  return EFI_UNSUPPORTED;
+}
+
+EFI_STATUS
+EFIAPI
+PeiUnregisterNotify (
+  IN VOID  *Handle
+  )
+{
+  return EFI_UNSUPPORTED;
 }
 
 /**

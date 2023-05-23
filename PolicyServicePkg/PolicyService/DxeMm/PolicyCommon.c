@@ -323,3 +323,23 @@ Exit:
   PolicyLockRelease ();
   return Status;
 }
+
+EFI_STATUS
+EFIAPI
+CommonRegisterNotify (
+  IN CONST EFI_GUID           *PolicyGuid,
+  IN CONST UINT32             EventTypes,
+  IN CONST UINT32             Priority,
+  IN POLICY_HANDLER_CALLBACK  CallbackRoutine,
+  OUT VOID                    **Handle
+  )
+{
+}
+
+EFI_STATUS
+EFIAPI
+PeiUnregisterNotify (
+  IN VOID  *Handle
+  )
+{
+}
