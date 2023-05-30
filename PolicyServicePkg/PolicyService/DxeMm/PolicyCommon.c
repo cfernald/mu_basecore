@@ -10,7 +10,15 @@
 #include "PolicyCommon.h"
 #include "PolicyInterface.h"
 
-STATIC LIST_ENTRY  mPolicyListHead = INITIALIZE_LIST_HEAD_VARIABLE (mPolicyListHead);
+LIST_ENTRY  mPolicyListHead = INITIALIZE_LIST_HEAD_VARIABLE (mPolicyListHead);
+LIST_ENTRY  mNotifyListHead = INITIALIZE_LIST_HEAD_VARIABLE (mNotifyListHead);
+
+//
+// Global state for the potentially recursive notify routine.
+//
+
+BOOLEAN  mNotifyInProgress = FALSE;
+BOOLEAN  mCallbacksDeleted = FALSE;
 
 /**
   Retrieves the policy descriptor, buffer, and size for a given policy GUID.
@@ -220,7 +228,8 @@ CommonRemovePolicy (
       FreePool (Entry->Policy);
     }
 
-    FreePool (Entry);
+    Entry->FreeAfterNotify = TRUE;
+    CommonPolicyNotify (POLICY_NOTIFY_REMOVED, Entry);
   }
 
   PolicyLockRelease ();
@@ -253,6 +262,7 @@ CommonSetPolicy (
   EFI_STATUS    Status;
   POLICY_ENTRY  *Entry;
   VOID          *AllocatedPolicy;
+  UINT32        Events;
 
   if ((PolicyGuid == NULL) || (Policy == NULL) || (PolicySize == 0)) {
     return EFI_INVALID_PARAMETER;
@@ -313,6 +323,9 @@ CommonSetPolicy (
     InsertTailList (&mPolicyListHead, &Entry->Link);
   }
 
+  Events = POLICY_NOTIFY_SET | (Entry->Attributes & POLICY_ATTRIBUTE_FINALIZED ? POLICY_NOTIFY_FINALIZED : 0);
+  CommonPolicyNotify (Events, Entry);
+
   Status = InstallPolicyIndicatorProtocol (PolicyGuid);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: Failed to install notification protocol. (%r)\n", __FUNCTION__, Status));
@@ -334,12 +347,156 @@ CommonRegisterNotify (
   OUT VOID                    **Handle
   )
 {
+  LIST_ENTRY           *Link;
+  POLICY_NOTIFY_ENTRY  *CheckEntry;
+  POLICY_NOTIFY_ENTRY  *Entry;
+
+  if ((CallbackRoutine == NULL) ||
+      ((EventTypes & POLICY_NOTIFY_ALL) != EventTypes))
+  {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Entry = AllocatePool (sizeof (POLICY_NOTIFY_ENTRY));
+  if (Entry == NULL) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  ZeroMem (Entry, sizeof (POLICY_NOTIFY_ENTRY));
+  Entry->Signature       = POLICY_NOTIFY_ENTRY_SIGNATURE;
+  Entry->PolicyGuid      = *PolicyGuid;
+  Entry->EventTypes      = EventTypes;
+  Entry->Priority        = Priority;
+  Entry->CallbackRoutine = CallbackRoutine;
+
+  //
+  // Find the entry to insert this new entry before. If the list is empty then
+  // this is the head.
+  //
+
+  BASE_LIST_FOR_EACH (Link, &mNotifyListHead) {
+    CheckEntry = POLICY_NOTIFY_ENTRY_FROM_LINK (Link);
+    if (CheckEntry->Priority > Priority) {
+      break;
+    }
+  }
+
+  InsertTailList (Link, &Entry->Link);
+  *Handle = (VOID *)Entry;
+  return EFI_SUCCESS;
 }
 
 EFI_STATUS
 EFIAPI
-PeiUnregisterNotify (
+CommonUnregisterNotify (
   IN VOID  *Handle
   )
 {
+  POLICY_NOTIFY_ENTRY  *Entry;
+
+  Entry = (POLICY_NOTIFY_ENTRY *)Handle;
+  if (Entry->Signature != POLICY_NOTIFY_ENTRY_SIGNATURE) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (!IsNodeInList (&mNotifyListHead, &Entry->Link)) {
+    ASSERT (FALSE);
+    return EFI_NOT_FOUND;
+  }
+
+  //
+  // If this entry is the entry that currently being processed, step the entry
+  // forward.
+  //
+  if (mNotifyInProgress) {
+    Entry->Tombstone  = TRUE;
+    mCallbacksDeleted = TRUE;
+  } else {
+    RemoveEntryList (&Entry->Link);
+    FreePool (Entry);
+  }
+
+  return EFI_SUCCESS;
+}
+
+VOID
+EFIAPI
+CommonPolicyNotify (
+  IN CONST UINT32  EventTypes,
+  IN POLICY_ENTRY  *PolicyEntry
+  )
+{
+  LIST_ENTRY           *Link;
+  POLICY_NOTIFY_ENTRY  *NotifyEntry;
+  BOOLEAN              FirstNotification;
+  UINT32               Depth;
+
+  //
+  // Global recursion handling.
+  //
+
+  FirstNotification = !mNotifyInProgress;
+  mNotifyInProgress = TRUE;
+
+  //
+  // Per-policy recursion handling.
+  //
+
+  ASSERT (PolicyEntry->NotifyDepth < MAX_UINT32);
+  PolicyEntry->NotifyDepth++;
+  Depth = PolicyEntry->NotifyDepth;
+
+  BASE_LIST_FOR_EACH (Link, &mNotifyListHead) {
+    NotifyEntry = POLICY_NOTIFY_ENTRY_FROM_LINK (Link);
+    if (CompareGuid (&PolicyEntry->PolicyGuid, &NotifyEntry->PolicyGuid) &&
+        ((EventTypes & NotifyEntry->EventTypes) != 0) &&
+        !NotifyEntry->Tombstone)
+    {
+      NotifyEntry->CallbackRoutine (&PolicyEntry->PolicyGuid, EventTypes, NotifyEntry);
+
+      //
+      // If there was a newer notify then this notification is now moot.
+      //
+
+      if (PolicyEntry->NotifyDepth != Depth) {
+        break;
+      }
+    }
+  }
+
+  //
+  // If this is the top of the stack for the policy then clear that depth and
+  // free in the case that the policy was removed during the callbacks.
+  //
+
+  if (Depth == 1) {
+    PolicyEntry->NotifyDepth = 0;
+    if (PolicyEntry->FreeAfterNotify) {
+      FreePool (PolicyEntry);
+      PolicyEntry = NULL;
+    }
+  }
+
+  //
+  // To simplify potential link list edge cases with the recursion, removed
+  // callbacks that occur during the recursion are only tomb-stoned, if this
+  // is the top of the stack then go through and remove those.
+  //
+
+  if (FirstNotification) {
+    if (mCallbacksDeleted) {
+      BASE_LIST_FOR_EACH (Link, &mNotifyListHead) {
+        NotifyEntry = POLICY_NOTIFY_ENTRY_FROM_LINK (Link);
+        if (NotifyEntry->Tombstone) {
+          Link = Link->BackLink;
+          RemoveEntryList (&NotifyEntry->Link);
+          FreePool (NotifyEntry);
+        }
+      }
+
+      mCallbacksDeleted = FALSE;
+    }
+
+    mNotifyInProgress = FALSE;
+  }
 }

@@ -79,15 +79,16 @@ typedef
 VOID
 (EFIAPI *POLICY_HANDLER_CALLBACK)(
   IN CONST EFI_GUID *PolicyGuid,
-  IN UINT32 EventTypes
+  IN UINT32 EventTypes,
   IN VOID *CallbackHandle
   );
 
-#define POLICY_NOTIFY_CREATED    (BIT0)
-#define POLICY_NOTIFY_UPDATED    (BIT1)
-#define POLICY_NOTIFY_FINALIZED  (BIT2)
-#define POLICY_NOTIFY_REMOVED    (BIT3)
-#define POLICY_NOTIFY_ALL        (MAX_UINT32)
+#define POLICY_NOTIFY_SET        (BIT0)
+#define POLICY_NOTIFY_FINALIZED  (BIT1)
+#define POLICY_NOTIFY_REMOVED    (BIT2)
+#define POLICY_NOTIFY_ALL        (POLICY_NOTIFY_SET | \
+                                  POLICY_NOTIFY_FINALIZED | \
+                                  POLICY_NOTIFY_REMOVED)
 
 #define POLICY_NOTIFY_DEFAULT_PRIORITY  (512)
 

@@ -11,12 +11,14 @@
 #define _POLICY_COMMON_H_
 
 #include <Uefi.h>
+#include <Pi/PiMultiPhase.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/HobLib.h>
 #include <Library/DebugLib.h>
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 
+#include <PolicyInterface.h>
 #include "../PolicyHob.h"
 
 typedef struct _POLICY_ENTRY {
@@ -28,10 +30,25 @@ typedef struct _POLICY_ENTRY {
   VOID          *Policy;
   UINT16        PolicySize;
   UINTN         AllocationSize;
+  UINT32        NotifyDepth;
+  BOOLEAN       FreeAfterNotify;
 } POLICY_ENTRY;
 
 #define POLICY_ENTRY_SIGNATURE  SIGNATURE_32('p', 'o', 'l', 'c')
 #define POLICY_ENTRY_FROM_LINK(a)  CR (a, POLICY_ENTRY, Link, POLICY_ENTRY_SIGNATURE)
+
+typedef struct _POLICY_NOTIFY_ENTRY {
+  UINT32                     Signature;
+  LIST_ENTRY                 Link;
+  EFI_GUID                   PolicyGuid;
+  UINT32                     EventTypes;
+  UINT32                     Priority;
+  POLICY_HANDLER_CALLBACK    CallbackRoutine;
+  BOOLEAN                    Tombstone;
+} POLICY_NOTIFY_ENTRY;
+
+#define POLICY_NOTIFY_ENTRY_SIGNATURE  SIGNATURE_32('p', 'o', 'l', 'n')
+#define POLICY_NOTIFY_ENTRY_FROM_LINK(a)  CR (a, POLICY_NOTIFY_ENTRY, Link, POLICY_NOTIFY_ENTRY_SIGNATURE)
 
 //
 // Macros for managing the critical section.
@@ -159,8 +176,15 @@ CommonRegisterNotify (
 
 EFI_STATUS
 EFIAPI
-PeiUnregisterNotify (
+CommonUnregisterNotify (
   IN VOID  *Handle
+  );
+
+VOID
+EFIAPI
+CommonPolicyNotify (
+  IN CONST UINT32  EventTypes,
+  IN POLICY_ENTRY  *PolicyEntry
   );
 
 #endif
