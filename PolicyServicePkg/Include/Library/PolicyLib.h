@@ -84,6 +84,22 @@ RemovePolicy (
   IN CONST EFI_GUID  *PolicyGuid
   );
 
+EFI_STATUS
+EFIAPI
+RegisterPolicyNotify (
+  IN CONST EFI_GUID           *PolicyGuid,
+  IN CONST UINT32             EventTypes,
+  IN CONST UINT32             Priority,
+  IN POLICY_HANDLER_CALLBACK  CallbackRoutine,
+  OUT VOID                    **Handle
+  );
+
+EFI_STATUS
+EFIAPI
+UnregisterPolicyNotify (
+  IN VOID  *Handle
+  );
+
 /**
   Retrieves a verified policy of the given type from the policy store.
 
