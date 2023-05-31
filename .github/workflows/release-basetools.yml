@@ -96,9 +96,6 @@ jobs:
           name: basetools-${{ matrix.tool_chain }}-${{ matrix.target }}
           path: ${{ matrix.output_dir }}
 
-      - name: Print Files
-        run: ls -l ${{ matrix.output_dir }}
-
   publish:
     name: Publish Base Tools
     needs: build
@@ -113,13 +110,12 @@ jobs:
         with:
           path: ${{ runner.temp }}/artifacts
 
-      - name: Print Files
-        run: ls --recursive -l ${{ runner.temp }}/artifacts
-
       - name: Stage Files
         run: mkdir ${{ runner.temp }}/basetools ;
           mv ${{ runner.temp }}/artifacts/basetools-GCC5-X64       ${{ runner.temp }}/basetools/Linux-x86 ;
+          chmod a+x ${{ runner.temp }}/basetools/Linux-x86/* ;
           mv ${{ runner.temp }}/artifacts/basetools-GCC5-AARCH64   ${{ runner.temp }}/basetools/Linux-ARM-64 ;
+          chmod a+x ${{ runner.temp }}/basetools/Linux-ARM-64/* ;
           mv ${{ runner.temp }}/artifacts/basetools-VS2022-IA32    ${{ runner.temp }}/basetools/Windows-x86 ;
           mv ${{ runner.temp }}/artifacts/basetools-VS2022-ARM     ${{ runner.temp }}/basetools/Windows-ARM ;
           mv ${{ runner.temp }}/artifacts/basetools-VS2022-AARCH64 ${{ runner.temp }}/basetools/Windows-ARM-64 ;
