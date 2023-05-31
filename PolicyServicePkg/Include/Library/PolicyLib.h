@@ -9,6 +9,8 @@
 #ifndef _POLICY_LIB_H_
 #define _POLICY_LIB_H_
 
+#include <PolicyInterface.h>
+
 #define VERIFIED_POLICY_LIB_VERSION  1
 
 #pragma pack(1)
