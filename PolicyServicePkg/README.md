@@ -155,22 +155,24 @@ interface to retrieve the policy data after being notified or dispatched.
 
 The policy service supports callbacks for various types of policy events such
 as a policy being created, updated, finalized, or removed. Consumers may use the
-_RegisterNotify_ to set a callback in the event that a provided policy undergoes
-the event specified in the callback registration.
+`RegisterNotify` routine to set a callback in the event that a provided policy
+undergoes the event specified in the callback registration. A given callbacks may
+receive an events with multiple events at once. For example, a finalized event will
+always be accompanied by a set event since a policy must be set to be finalized.
 
-Registered callbacks will be called in order of ascending `Priority` provided with
-ties being resulting in the first-come-first-serve approach. Callbacks may make
-edits to the underlying policy. Any edit to the underlying policy in a callback
-will result in all remaining callbacks of a higher priority value to be called
-based on the new event instead of the original events. All callbacks of a lower
-priority value then the editor's callback will not be notified of the new event.
-This means that if there is a callback of priority 100 who edits the policy, a
-callback at priority 0 will have already been notified of the original edit and
-will not be notified of the additional edit, and a callback of priority 500 would
-only get the notification for the edit made by the priority 100 callback. The priority
-should be a reflection of the data dependency order and the singular pass of the
-notification list helps prevent circular data dependencies by discouraging inverse
-dependencies.
+Registered callbacks will be invoked in order of ascending `Priority` with ties
+being resolved with a first-come-first-serve approach. Callbacks may make
+edits to the underlying policy which will result in all of the original still
+pending notifications being canceled and the all of callbacks being re-invoked
+with the new event. For example, if you have the notifications of ascending priority
+where B edits the policy the sequence of callbacks would be
+
+```
+A -> B (EDIT) -> A -> B -> C
+```
+
+For this reason, callbacks that edit the policy should either remove their
+notification first or take precautions to not create a infinite notification loop.
 
 ## Policy Service Implementation
 
