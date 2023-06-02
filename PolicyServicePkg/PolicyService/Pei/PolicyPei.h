@@ -20,6 +20,35 @@
 #include <Ppi/Policy.h>
 #include "../PolicyHob.h"
 
+//
+// Structures for tracking policy callbacks.
+//
+
+#define NOTIFY_ENTRIES_PER_HOB  (64)
+
+typedef struct _POLICY_NOTIFY_ENTRY {
+  EFI_GUID                   PolicyGuid;
+  UINT32                     EventTypes;
+  UINT32                     Priority;
+  POLICY_HANDLER_CALLBACK    CallbackRoutine;
+  BOOLEAN                    Tombstone;
+} POLICY_NOTIFY_ENTRY;
+
+typedef struct _PEI_POLICY_NOTIFY_HOB {
+  UINT16                 Index;
+  UINT16                 Count;
+  POLICY_NOTIFY_ENTRY    Entries[NOTIFY_ENTRIES_PER_HOB];
+} PEI_POLICY_NOTIFY_HOB;
+
+//
+// Pointers to HOBs should be avoided. For this reason, the PEI handle is
+// actually just the index of the HOB and index in that HOB.
+//
+
+#define NOTIFY_HANDLE(_hobindex, _entryindex)  (VOID *)(UINTN)((_hobindex << 16) | _entryindex)
+#define NOTIFY_HANDLE_HOB_INDEX(_handle)       (UINT16)((((UINTN)_handle) >> 16) & MAX_UINT16)
+#define NOTIFY_HANDLE_ENTRY_INDEX(_handle)     (UINT16)((UINTN)_handle & MAX_UINT16)
+
 /**
   Creates or updates a policy in the policy store. Will notify any applicable
   callbacks.
@@ -94,6 +123,13 @@ EFI_STATUS
 EFIAPI
 PeiUnregisterNotify (
   IN VOID  *Handle
+  );
+
+VOID
+EFIAPI
+PeiPolicyNotify (
+  IN CONST UINT32       EventTypes,
+  IN POLICY_HOB_HEADER  *PolicyHob
   );
 
 #endif

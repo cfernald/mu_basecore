@@ -1,5 +1,5 @@
 /** @file
-  Host based unit tests for the Dxe/MM policy service module.
+  Host based unit tests for the PEI policy service module.
 
   Copyright (c) Microsoft Corporation.<BR>
   SPDX-License-Identifier: BSD-2-Clause-Patent
@@ -12,20 +12,12 @@
 #include <Library/DebugLib.h>
 #include <Library/UnitTestLib.h>
 #include <Library/PrintLib.h>
+#include <Library/MemoryAllocationLib.h>
 #include <PolicyInterface.h>
-#include <PolicyCommon.h>
+#include <PolicyPei.h>
 
-#define UNIT_TEST_NAME     "DXE/MM Policy Service Unit Test"
+#define UNIT_TEST_NAME     "PEI Policy Service Unit Test"
 #define UNIT_TEST_VERSION  "1.0"
-
-//
-// Reaching into the binary for testing.
-//
-
-extern LIST_ENTRY  mPolicyListHead;
-extern LIST_ENTRY  mNotifyListHead;
-extern BOOLEAN     mNotifyInProgress;
-extern BOOLEAN     mCallbacksDeleted;
 
 //
 // Internal tracking.
@@ -41,36 +33,8 @@ NOTIFICATION_TRACKER  Notifications[100]      = { 0 };
 UINT32                NotificationsCount      =  0;
 UINT32                NotifyCountUpdateRemove =  0;
 
-//
-// Boiler plate functions required by PolicyCommon
-//
-
-VOID
-EFIAPI
-PolicyLockAcquire (
-  VOID
-  )
-{
-  return;
-}
-
-VOID
-EFIAPI
-PolicyLockRelease (
-  VOID
-  )
-{
-  return;
-}
-
-EFI_STATUS
-EFIAPI
-InstallPolicyIndicatorProtocol (
-  IN CONST EFI_GUID  *PolicyGuid
-  )
-{
-  return EFI_SUCCESS;
-}
+extern UINT32                 HobByteIndex;
+extern PEI_POLICY_NOTIFY_HOB  *CurrentPolicyList;
 
 VOID
 EFIAPI
@@ -78,28 +42,10 @@ PolicyServiceCleanup (
   IN UNIT_TEST_CONTEXT  Context
   )
 {
-  POLICY_NOTIFY_ENTRY  *NotifyEntry;
-  POLICY_ENTRY         *PolicyEntry;
-
-  mNotifyInProgress = FALSE;
-  mCallbacksDeleted = FALSE;
-
-  while (!IsListEmpty (&mNotifyListHead)) {
-    NotifyEntry = POLICY_NOTIFY_ENTRY_FROM_LINK (mNotifyListHead.ForwardLink);
-    RemoveEntryList (&NotifyEntry->Link);
-    FreePool (NotifyEntry);
-  }
-
-  while (!IsListEmpty (&mPolicyListHead)) {
-    PolicyEntry = POLICY_ENTRY_FROM_LINK (mPolicyListHead.ForwardLink);
-    RemoveEntryList (&PolicyEntry->Link);
-    FreePool (PolicyEntry->Policy);
-    FreePool (PolicyEntry);
-  }
-
   ZeroMem (&Notifications[0], sizeof (Notifications));
   NotificationsCount      = 0;
   NotifyCountUpdateRemove = 0;
+  HobByteIndex            = 0;
 }
 
 VOID
@@ -110,16 +56,14 @@ GenericNotify (
   IN VOID            *CallbackHandle
   )
 {
-  POLICY_NOTIFY_ENTRY  *Entry;
-  VOID                 *Policy;
-  EFI_STATUS           Status;
+  VOID        *Policy;
+  EFI_STATUS  Status;
 
-  Entry = (POLICY_NOTIFY_ENTRY *)CallbackHandle;
-  ASSERT (Entry->Signature == POLICY_NOTIFY_ENTRY_SIGNATURE);
+  ASSERT (CurrentPolicyList->Index == NOTIFY_HANDLE_HOB_INDEX (CallbackHandle));
 
   Notifications[NotificationsCount].Guid     = *PolicyGuid;
   Notifications[NotificationsCount].Events   = EventTypes;
-  Notifications[NotificationsCount].Priority = Entry->Priority;
+  Notifications[NotificationsCount].Priority = CurrentPolicyList->Entries[NOTIFY_HANDLE_ENTRY_INDEX (CallbackHandle)].Priority;
   NotificationsCount++;
 
   //
@@ -128,11 +72,11 @@ GenericNotify (
   //
 
   if (NotifyCountUpdateRemove == NotificationsCount) {
-    Status = CommonUnregisterNotify (CallbackHandle);
+    Status = PeiUnregisterNotify (CallbackHandle);
     ASSERT (!EFI_ERROR (Status));
     Policy = AllocatePool (10);
     ASSERT (Policy != NULL);
-    Status = CommonSetPolicy (PolicyGuid, POLICY_ATTRIBUTE_FINALIZED, Policy, 10);
+    Status = PeiSetPolicy (PolicyGuid, POLICY_ATTRIBUTE_FINALIZED, Policy, 10);
     ASSERT (!EFI_ERROR (Status));
   }
 }
@@ -160,7 +104,7 @@ SimpleNotifyTest (
   // Setup a basic notify.
   //
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid0,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY,
@@ -170,7 +114,7 @@ SimpleNotifyTest (
 
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid1,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY,
@@ -180,7 +124,7 @@ SimpleNotifyTest (
 
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid2,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY,
@@ -194,7 +138,7 @@ SimpleNotifyTest (
 
   Policy = AllocatePool (10);
   UT_ASSERT_NOT_NULL (Policy);
-  Status = CommonSetPolicy (&TestGuid0, 0, Policy, 10);
+  Status = PeiSetPolicy (&TestGuid0, 0, Policy, 10);
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
   UT_ASSERT_EQUAL (NotificationsCount, 1);
@@ -203,7 +147,7 @@ SimpleNotifyTest (
 
   Policy = AllocatePool (10);
   UT_ASSERT_NOT_NULL (Policy);
-  Status = CommonSetPolicy (&TestGuid1, POLICY_ATTRIBUTE_FINALIZED, Policy, 10);
+  Status = PeiSetPolicy (&TestGuid1, POLICY_ATTRIBUTE_FINALIZED, Policy, 10);
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
   UT_ASSERT_EQUAL (NotificationsCount, 2);
@@ -212,7 +156,7 @@ SimpleNotifyTest (
 
   Policy = AllocatePool (10);
   UT_ASSERT_NOT_NULL (Policy);
-  Status = CommonSetPolicy (&TestGuid2, 0, Policy, 10);
+  Status = PeiSetPolicy (&TestGuid2, 0, Policy, 10);
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
   UT_ASSERT_EQUAL (NotificationsCount, 3);
@@ -223,7 +167,7 @@ SimpleNotifyTest (
   // Remove a policy
   //
 
-  Status = CommonRemovePolicy (&TestGuid2);
+  Status = PeiRemovePolicy (&TestGuid2);
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
   UT_ASSERT_EQUAL (NotificationsCount, 4);
@@ -246,7 +190,7 @@ NotifyPriorityTest (
     0xf0192692, 0xd698, 0x4955, { 0xaf, 0xa4, 0xd5, 0xb0, 0xed, 0xa1, 0x38, 0x13 }
   };
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY,
@@ -256,7 +200,7 @@ NotifyPriorityTest (
 
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY - 1,
@@ -266,7 +210,7 @@ NotifyPriorityTest (
 
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY + 1,
@@ -278,7 +222,7 @@ NotifyPriorityTest (
 
   Policy = AllocatePool (10);
   UT_ASSERT_NOT_NULL (Policy);
-  Status = CommonSetPolicy (&TestGuid, 0, Policy, 10);
+  Status = PeiSetPolicy (&TestGuid, 0, Policy, 10);
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
   UT_ASSERT_EQUAL (NotificationsCount, 3);
@@ -308,7 +252,7 @@ EditingNotifyTest (
     0xd71e9bc1, 0x56bf, 0x4ed1, { 0xaf, 0x1c, 0x52, 0x67, 0xf1, 0xfe, 0xed, 0xce }
   };
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY,
@@ -318,7 +262,7 @@ EditingNotifyTest (
 
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY - 1,
@@ -328,7 +272,7 @@ EditingNotifyTest (
 
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
-  Status = CommonRegisterNotify (
+  Status = PeiRegisterNotify (
              &TestGuid,
              POLICY_NOTIFY_ALL,
              POLICY_NOTIFY_DEFAULT_PRIORITY + 1,
@@ -342,7 +286,7 @@ EditingNotifyTest (
 
   Policy = AllocatePool (10);
   UT_ASSERT_NOT_NULL (Policy);
-  Status = CommonSetPolicy (&TestGuid, 0, Policy, 10);
+  Status = PeiSetPolicy (&TestGuid, 0, Policy, 10);
   UT_ASSERT_NOT_EFI_ERROR (Status);
 
   UT_ASSERT_EQUAL (NotificationsCount, 4);
@@ -400,7 +344,7 @@ UefiTestMain (
   //
   // Populate the PolicyNotifyTests Unit Test Suite.
   //
-  Status = CreateUnitTestSuite (&PolicyNotifyTests, Framework, "Policy Notification Tests", "DxeMmPolicy.Notify", NULL, NULL);
+  Status = CreateUnitTestSuite (&PolicyNotifyTests, Framework, "Policy Notification Tests", "PeiPolicy.Notify", NULL, NULL);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "Failed in CreateUnitTestSuite for PolicyNotifyTests\n"));
     Status = EFI_OUT_OF_RESOURCES;

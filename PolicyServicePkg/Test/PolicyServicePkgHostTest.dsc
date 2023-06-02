@@ -23,4 +23,5 @@
 
 [Components]
   PolicyServicePkg/PolicyService/DxeMm/UnitTest/DxeMmPolicyUnitTest.inf
+  PolicyServicePkg/PolicyService/Pei/UnitTest/PeiPolicyUnitTest.inf
 

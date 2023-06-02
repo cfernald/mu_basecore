@@ -241,6 +241,7 @@ PeiSetPolicy (
 {
   EFI_STATUS         Status;
   POLICY_HOB_HEADER  *PolicyHob;
+  UINT32             Events;
 
   if ((PolicyGuid == NULL) || (Policy == NULL) || (PolicySize == 0)) {
     return EFI_INVALID_PARAMETER;
@@ -256,10 +257,14 @@ PeiSetPolicy (
       PolicyHob->PolicySize = PolicySize;
       PolicyHob->Attributes = Attributes;
       CopyMem (GET_HOB_POLICY_DATA (PolicyHob), Policy, PolicySize);
-      Status = PeiInstallPolicyIndicatorPpi (PolicyGuid);
-      if (EFI_ERROR (Status)) {
-        DEBUG ((DEBUG_ERROR, "%a: Failed to install notify PPI. (%r)\n", __FUNCTION__, Status));
-        return Status;
+      Events = POLICY_NOTIFY_SET | (Attributes & POLICY_ATTRIBUTE_FINALIZED ? POLICY_NOTIFY_FINALIZED : 0);
+      PeiPolicyNotify (Events, PolicyHob);
+      if (Attributes & POLICY_ATTRIBUTE_FINALIZED ) {
+        Status = PeiInstallPolicyIndicatorPpi (PolicyGuid);
+        if (EFI_ERROR (Status)) {
+          DEBUG ((DEBUG_ERROR, "%a: Failed to install notify PPI. (%r)\n", __FUNCTION__, Status));
+          return Status;
+        }
       }
 
       return EFI_SUCCESS;
@@ -281,10 +286,15 @@ PeiSetPolicy (
   PolicyHob->Attributes = Attributes;
   CopyMem (GET_HOB_POLICY_DATA (PolicyHob), Policy, PolicySize);
 
-  Status = PeiInstallPolicyIndicatorPpi (PolicyGuid);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: Failed to install notify PPI. (%r)\n", __FUNCTION__, Status));
-    return Status;
+  Events = POLICY_NOTIFY_SET | (Attributes & POLICY_ATTRIBUTE_FINALIZED ? POLICY_NOTIFY_FINALIZED : 0);
+  PeiPolicyNotify (Events, PolicyHob);
+
+  if (Attributes & POLICY_ATTRIBUTE_FINALIZED ) {
+    Status = PeiInstallPolicyIndicatorPpi (PolicyGuid);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: Failed to install notify PPI. (%r)\n", __FUNCTION__, Status));
+      return Status;
+    }
   }
 
   return EFI_SUCCESS;
@@ -317,6 +327,7 @@ PeiRemovePolicy (
     PolicyHob->Removed = 1;
   }
 
+  PeiPolicyNotify (POLICY_NOTIFY_REMOVED, PolicyHob);
   return Status;
 }
 
@@ -330,7 +341,53 @@ PeiRegisterNotify (
   OUT VOID                    **Handle
   )
 {
-  return EFI_UNSUPPORTED;
+  EFI_HOB_GUID_TYPE      *Hob;
+  PEI_POLICY_NOTIFY_HOB  *NotifyList;
+  POLICY_NOTIFY_ENTRY    *Entry;
+  UINT16                 Index;
+
+  if ((CallbackRoutine == NULL) ||
+      ((EventTypes & POLICY_NOTIFY_ALL) != EventTypes))
+  {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  //
+  // All notifications are tracked in HOBs.
+  //
+
+  Index = 0;
+  Hob   = GetFirstGuidHob (&gPolicyCallbackHobGuid);
+  while (Hob != NULL) {
+    NotifyList = GET_GUID_HOB_DATA (Hob);
+    if (NotifyList->Count < NOTIFY_ENTRIES_PER_HOB) {
+      break;
+    }
+
+    Index++;
+    Hob = GetNextGuidHob (&gPolicyCallbackHobGuid, GET_NEXT_HOB (Hob));
+  }
+
+  if (Hob == NULL) {
+    NotifyList = (PEI_POLICY_NOTIFY_HOB *)BuildGuidHob (&gPolicyCallbackHobGuid, sizeof (PEI_POLICY_NOTIFY_HOB));
+    if (NotifyList == NULL) {
+      DEBUG ((DEBUG_ERROR, "%a: Failed to allocate notification HOB.\n", __FUNCTION__));
+      return EFI_OUT_OF_RESOURCES;
+    }
+
+    ZeroMem (NotifyList, sizeof (PEI_POLICY_NOTIFY_HOB));
+    DEBUG ((DEBUG_INFO, "Setting Index 0x%x\n", Index));
+    NotifyList->Index = Index;
+  }
+
+  Entry                  = &NotifyList->Entries[NotifyList->Count];
+  Entry->PolicyGuid      = *PolicyGuid;
+  Entry->EventTypes      = EventTypes;
+  Entry->Priority        = Priority;
+  Entry->CallbackRoutine = CallbackRoutine;
+  *Handle                = NOTIFY_HANDLE (NotifyList->Index, NotifyList->Count);
+  NotifyList->Count++;
+  return EFI_SUCCESS;
 }
 
 EFI_STATUS
@@ -339,7 +396,137 @@ PeiUnregisterNotify (
   IN VOID  *Handle
   )
 {
-  return EFI_UNSUPPORTED;
+  EFI_STATUS             Status;
+  EFI_HOB_GUID_TYPE      *Hob;
+  PEI_POLICY_NOTIFY_HOB  *NotifyList;
+  UINT16                 HobIndex;
+  UINT16                 EntryIndex;
+
+  HobIndex   = NOTIFY_HANDLE_HOB_INDEX (Handle);
+  EntryIndex = NOTIFY_HANDLE_ENTRY_INDEX (Handle);
+
+  Status = EFI_NOT_FOUND;
+  Hob    = GetFirstGuidHob (&gPolicyCallbackHobGuid);
+  while (Hob != NULL) {
+    NotifyList = GET_GUID_HOB_DATA (Hob);
+    if (NotifyList->Index == HobIndex) {
+      ASSERT (NotifyList->Count > EntryIndex);
+      ZeroMem (&NotifyList->Entries[EntryIndex], sizeof (POLICY_NOTIFY_ENTRY));
+      NotifyList->Entries[EntryIndex].Tombstone = TRUE;
+      Status                                    = EFI_SUCCESS;
+      break;
+    }
+
+    Hob = GetNextGuidHob (&gPolicyCallbackHobGuid, GET_NEXT_HOB (Hob));
+  }
+
+  return Status;
+}
+
+VOID
+EFIAPI
+PeiPolicyNotify (
+  IN CONST UINT32       EventTypes,
+  IN POLICY_HOB_HEADER  *PolicyHob
+  )
+{
+  UINT16                 Depth;
+  EFI_HOB_GUID_TYPE      *Hob;
+  PEI_POLICY_NOTIFY_HOB  *NotifyList;
+  UINT16                 Index;
+  UINT32                 LowestPriority;
+  UINT32                 MinPriority;
+  BOOLEAN                NotifiesFound;
+
+  PolicyHob->NotifyDepth++;
+  Depth = PolicyHob->NotifyDepth;
+
+  //
+  // This iteration method is very inefficient. The reasoning at the time of implementation
+  // is that PEI phase callbacks should be limited in quantity and so this inefficiency
+  // is worth it to avoid the complexity of keeping the HOB lists sorted. This iteration
+  // works in 2 passes. The first to find the next lowest priority and the second
+  // to invoke all notifications of that priority.
+  //
+
+  MinPriority = 0;
+  while (TRUE) {
+    //
+    // First pass, find the next lowest priority.
+    //
+
+    NotifiesFound  = FALSE;
+    LowestPriority = MAX_UINT32;
+    Hob            = GetFirstGuidHob (&gPolicyCallbackHobGuid);
+    while (Hob != NULL) {
+      NotifyList = GET_GUID_HOB_DATA (Hob);
+      for (Index = 0; Index < NotifyList->Count; Index++) {
+        if (!NotifyList->Entries[Index].Tombstone &&
+            CompareGuid (&NotifyList->Entries[Index].PolicyGuid, &PolicyHob->PolicyGuid) &&
+            ((NotifyList->Entries[Index].EventTypes & EventTypes) != 0) &&
+            (NotifyList->Entries[Index].Priority >= MinPriority))
+        {
+          NotifiesFound = TRUE;
+          if (NotifyList->Entries[Index].Priority < LowestPriority) {
+            LowestPriority = NotifyList->Entries[Index].Priority;
+          }
+        }
+      }
+
+      Hob = GetNextGuidHob (&gPolicyCallbackHobGuid, GET_NEXT_HOB (Hob));
+    }
+
+    if (!NotifiesFound) {
+      break;
+    }
+
+    //
+    // Second pass, call all of the notifies that match the priority.
+    //
+    Hob = GetFirstGuidHob (&gPolicyCallbackHobGuid);
+    while (Hob != NULL) {
+      NotifyList = GET_GUID_HOB_DATA (Hob);
+      for (Index = 0; Index < NotifyList->Count; Index++) {
+        if (!NotifyList->Entries[Index].Tombstone &&
+            CompareGuid (&NotifyList->Entries[Index].PolicyGuid, &PolicyHob->PolicyGuid) &&
+            ((NotifyList->Entries[Index].EventTypes & EventTypes) != 0) &&
+            (NotifyList->Entries[Index].Priority == LowestPriority))
+        {
+          NotifyList->Entries[Index].CallbackRoutine (
+                                       &PolicyHob->PolicyGuid,
+                                       EventTypes,
+                                       NOTIFY_HANDLE (NotifyList->Index, Index)
+                                       );
+
+          //
+          // If a more recent notify went through then quick escape.
+          //
+          if (PolicyHob->NotifyDepth != Depth) {
+            goto LoopBreak;
+          }
+        }
+      }
+
+      Hob = GetNextGuidHob (&gPolicyCallbackHobGuid, GET_NEXT_HOB (Hob));
+    }
+
+    if (LowestPriority == MAX_UINT32) {
+      break;
+    }
+
+    MinPriority = LowestPriority + 1;
+  }
+
+LoopBreak:
+
+  //
+  // If this is the top of the notification stack for this policy, then reset the
+  // tracking field.
+  //
+
+  if (Depth == 1) {
+    PolicyHob->NotifyDepth = 0;
+  }
 }
 
 /**

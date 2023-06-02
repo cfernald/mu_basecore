@@ -184,9 +184,11 @@ IngestPoliciesFromHob (
     InsertTailList (&mPolicyListHead, &PolicyEntry->Link);
     PolicyCount++;
 
-    Status = InstallPolicyIndicatorProtocol (&PolicyEntry->PolicyGuid);
-    if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "%a: Failed to install notification protocol. (%r)\n", __FUNCTION__, Status));
+    if (PolicyEntry->Attributes & POLICY_ATTRIBUTE_FINALIZED) {
+      Status = InstallPolicyIndicatorProtocol (&PolicyEntry->PolicyGuid);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: Failed to install notification protocol. (%r)\n", __FUNCTION__, Status));
+      }
     }
   }
 
@@ -321,15 +323,18 @@ CommonSetPolicy (
     Entry->AllocationSize = PolicySize;
     CopyMem (Entry->Policy, Policy, PolicySize);
     InsertTailList (&mPolicyListHead, &Entry->Link);
+    Status = EFI_SUCCESS;
   }
 
   Events = POLICY_NOTIFY_SET | (Entry->Attributes & POLICY_ATTRIBUTE_FINALIZED ? POLICY_NOTIFY_FINALIZED : 0);
   CommonPolicyNotify (Events, Entry);
 
-  Status = InstallPolicyIndicatorProtocol (PolicyGuid);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: Failed to install notification protocol. (%r)\n", __FUNCTION__, Status));
-    goto Exit;
+  if (Attributes & POLICY_ATTRIBUTE_FINALIZED) {
+    Status = InstallPolicyIndicatorProtocol (PolicyGuid);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: Failed to install notification protocol. (%r)\n", __FUNCTION__, Status));
+      goto Exit;
+    }
   }
 
 Exit:
