@@ -29,13 +29,18 @@ typedef struct _NOTIFICATION_TRACKER {
   UINT32      Priority;
 } NOTIFICATION_TRACKER;
 
-NOTIFICATION_TRACKER  Notifications[100]      = { 0 };
+NOTIFICATION_TRACKER  Notifications[150]      = { 0 };
 UINT32                NotificationsCount      =  0;
 UINT32                NotifyCountUpdateRemove =  0;
 
 extern UINT32                 HobByteIndex;
 extern PEI_POLICY_NOTIFY_HOB  *CurrentPolicyList;
 
+/**
+  Cleans up the policy and test state.
+
+  @param[in]  Context                     Unused.
+**/
 VOID
 EFIAPI
 PolicyServiceCleanup (
@@ -48,6 +53,14 @@ PolicyServiceCleanup (
   HobByteIndex            = 0;
 }
 
+/**
+  Callback for a policy notification event. This logs information about the
+  callback event for testing purposes.
+
+  @param[in]  PolicyGuid        The GUID of the policy being notified.
+  @param[in]  EventTypes        The events that occurred for the notification.
+  @param[in]  CallbackHandle    The handle for the callback being invoked.
+**/
 VOID
 EFIAPI
 GenericNotify (
@@ -81,6 +94,14 @@ GenericNotify (
   }
 }
 
+/**
+  Tests the basics of the notify callbacks.
+
+  @param[in]  Context                     Unused.
+
+  @retval   UNIT_TEST_PASSED              Test passed.
+  @retval   UNIT_TEST_ERROR_TEST_FAILED   Test failed.
+**/
 UNIT_TEST_STATUS
 EFIAPI
 SimpleNotifyTest (
@@ -177,6 +198,14 @@ SimpleNotifyTest (
   return UNIT_TEST_PASSED;
 }
 
+/**
+  Tests the priority mechanism of the notify callbacks.
+
+  @param[in]  Context                     Unused.
+
+  @retval   UNIT_TEST_PASSED              Test passed.
+  @retval   UNIT_TEST_ERROR_TEST_FAILED   Test failed.
+**/
 UNIT_TEST_STATUS
 EFIAPI
 NotifyPriorityTest (
@@ -239,6 +268,14 @@ NotifyPriorityTest (
   return UNIT_TEST_PASSED;
 }
 
+/**
+  Tests editing the policy in a callback.
+
+  @param[in]  Context                     Unused.
+
+  @retval   UNIT_TEST_PASSED              Test passed.
+  @retval   UNIT_TEST_ERROR_TEST_FAILED   Test failed.
+**/
 UNIT_TEST_STATUS
 EFIAPI
 EditingNotifyTest (
@@ -311,6 +348,56 @@ EditingNotifyTest (
 }
 
 /**
+  Tests a large number of callbacks to test the multi-hob scenarios.
+
+  @param[in]  Context                     Unused.
+
+  @retval   UNIT_TEST_PASSED              Test passed.
+  @retval   UNIT_TEST_ERROR_TEST_FAILED   Test failed.
+**/
+UNIT_TEST_STATUS
+EFIAPI
+LargeNumberNotifyTest (
+  IN UNIT_TEST_CONTEXT  Context
+  )
+{
+  EFI_STATUS    Status;
+  VOID          *Handle;
+  VOID          *Policy;
+  UINT32        Index;
+  CONST UINT32  Count    = 140;
+  EFI_GUID      TestGuid = {
+    0x455d8ad7, 0xe730, 0x409b, { 0xbd, 0xaa, 0xcb, 0x52, 0xaf, 0x0a, 0x8b, 0x9e }
+  };
+
+  for (Index = 0; Index < Count; Index++) {
+    Status = PeiRegisterNotify (
+               &TestGuid,
+               POLICY_NOTIFY_ALL,
+               Count - Index,
+               GenericNotify,
+               &Handle
+               );
+
+    UT_ASSERT_NOT_EFI_ERROR (Status);
+  }
+
+  Policy = AllocatePool (10);
+  UT_ASSERT_NOT_NULL (Policy);
+  Status = PeiSetPolicy (&TestGuid, 0, Policy, 10);
+  UT_ASSERT_NOT_EFI_ERROR (Status);
+
+  UT_ASSERT_EQUAL (NotificationsCount, Count);
+  for (Index = 0; Index < Count; Index++) {
+    UT_ASSERT_MEM_EQUAL (&Notifications[Index].Guid, &TestGuid, sizeof (EFI_GUID));
+    UT_ASSERT_EQUAL (Notifications[Index].Priority, Index + 1);
+    UT_ASSERT_EQUAL (Notifications[Index].Events, POLICY_NOTIFY_SET);
+  }
+
+  return UNIT_TEST_PASSED;
+}
+
+/**
   Initialize the unit test framework, suite, and unit tests for the
   sample unit tests and run the unit tests.
 
@@ -354,6 +441,7 @@ UefiTestMain (
   AddTestCase (PolicyNotifyTests, "Test of basic policy notifications", "SimpleNotifyTest", SimpleNotifyTest, NULL, PolicyServiceCleanup, NULL);
   AddTestCase (PolicyNotifyTests, "Test of policy priority", "NotifyPriorityTest", NotifyPriorityTest, NULL, PolicyServiceCleanup, NULL);
   AddTestCase (PolicyNotifyTests, "Tests more complex use cases of notifications", "EditingNotifyTest", EditingNotifyTest, NULL, PolicyServiceCleanup, NULL);
+  AddTestCase (PolicyNotifyTests, "Tests a large number of notifications", "LargeNumberNotifyTest", LargeNumberNotifyTest, NULL, PolicyServiceCleanup, NULL);
 
   //
   // Execute the tests.

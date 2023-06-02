@@ -72,6 +72,11 @@ InstallPolicyIndicatorProtocol (
   return EFI_SUCCESS;
 }
 
+/**
+  Cleans up the policy and test state.
+
+  @param[in]  Context                     Unused.
+**/
 VOID
 EFIAPI
 PolicyServiceCleanup (
@@ -102,6 +107,14 @@ PolicyServiceCleanup (
   NotifyCountUpdateRemove = 0;
 }
 
+/**
+  Callback for a policy notification event. This logs information about the
+  callback event for testing purposes.
+
+  @param[in]  PolicyGuid        The GUID of the policy being notified.
+  @param[in]  EventTypes        The events that occurred for the notification.
+  @param[in]  CallbackHandle    The handle for the callback being invoked.
+**/
 VOID
 EFIAPI
 GenericNotify (
@@ -137,6 +150,14 @@ GenericNotify (
   }
 }
 
+/**
+  Tests the basics of the notify callbacks.
+
+  @param[in]  Context                     Unused.
+
+  @retval   UNIT_TEST_PASSED              Test passed.
+  @retval   UNIT_TEST_ERROR_TEST_FAILED   Test failed.
+**/
 UNIT_TEST_STATUS
 EFIAPI
 SimpleNotifyTest (
@@ -233,6 +254,14 @@ SimpleNotifyTest (
   return UNIT_TEST_PASSED;
 }
 
+/**
+  Tests the priority mechanism of the notify callbacks.
+
+  @param[in]  Context                     Unused.
+
+  @retval   UNIT_TEST_PASSED              Test passed.
+  @retval   UNIT_TEST_ERROR_TEST_FAILED   Test failed.
+**/
 UNIT_TEST_STATUS
 EFIAPI
 NotifyPriorityTest (
@@ -295,6 +324,14 @@ NotifyPriorityTest (
   return UNIT_TEST_PASSED;
 }
 
+/**
+  Tests editing the policy in a callback.
+
+  @param[in]  Context                     Unused.
+
+  @retval   UNIT_TEST_PASSED              Test passed.
+  @retval   UNIT_TEST_ERROR_TEST_FAILED   Test failed.
+**/
 UNIT_TEST_STATUS
 EFIAPI
 EditingNotifyTest (

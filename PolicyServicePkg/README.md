@@ -167,9 +167,7 @@ pending notifications being canceled and the all of callbacks being re-invoked
 with the new event. For example, if you have the notifications of ascending priority
 where B edits the policy the sequence of callbacks would be
 
-```
-A -> B (EDIT) -> A -> B -> C
-```
+    A -> B (EDIT) -> A -> B -> C
 
 For this reason, callbacks that edit the policy should either remove their
 notification first or take precautions to not create a infinite notification loop.
