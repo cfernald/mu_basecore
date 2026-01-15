@@ -57,6 +57,12 @@ UINT32 mTableOffset;
 UINT32 mFileBufferSize;
 
 //
+// String table for long section names
+//
+CHAR8  *mStringTable = NULL;
+UINT32 mStringTableSize = 4; // Starts with 4-byte size field
+
+//
 //*****************************************************************************
 // Common ELF Functions
 //*****************************************************************************
@@ -130,9 +136,48 @@ CreateSectionHeader (
   )
 {
   EFI_IMAGE_SECTION_HEADER *Hdr;
+  UINT32                   NameLen;
+  UINT32                   StringOffset;
+  CHAR8                    *NewStringTable;
+
   Hdr = (EFI_IMAGE_SECTION_HEADER*)(mCoffFile + mTableOffset);
 
-  strcpy((char *)Hdr->Name, Name);
+  NameLen = (UINT32)strlen((const char *)Name);
+
+  //
+  // Check if the section name is too long. If so, add it to the string table and redirect.
+  //
+  if (NameLen > EFI_IMAGE_SIZEOF_SHORT_NAME - 1) {
+    //
+    // Allocate or expand the string table
+    //
+    StringOffset = mStringTableSize;
+    mStringTableSize += NameLen + 1; // +1 for null terminator
+
+    NewStringTable = (CHAR8 *)realloc(mStringTable, mStringTableSize);
+    if (NewStringTable == NULL) {
+      Error (NULL, 0, 4001, "Resource", "memory cannot be allocated for string table!");
+      return;
+    }
+    mStringTable = NewStringTable;
+
+    //
+    // Copy the long name to the string table
+    //
+    strcpy(mStringTable + StringOffset, Name);
+
+    //
+    // Set the section name to "/offset" format
+    // The offset is a decimal string representation
+    //
+    snprintf((char *)Hdr->Name, EFI_IMAGE_SIZEOF_SHORT_NAME, "/%u", StringOffset);
+  } else {
+    //
+    // Name fits in the section header, copy it directly
+    //
+    strcpy((char *)Hdr->Name, Name);
+  }
+
   Hdr->Misc.VirtualSize = Size;
   Hdr->VirtualAddress = Offset;
   Hdr->SizeOfRawData = Size;
@@ -144,6 +189,66 @@ CreateSectionHeader (
   Hdr->Characteristics = Flags;
 
   mTableOffset += sizeof (EFI_IMAGE_SECTION_HEADER);
+}
+
+UINT32
+CoffWriteStringTable (
+  VOID
+  )
+{
+  UINT32 StringTableFileOffset;
+
+  if (mStringTable == NULL || mStringTableSize <= 4) {
+    //
+    // No long section names, no string table needed
+    //
+    return 0;
+  }
+
+  //
+  // Align the string table on a 4-byte boundary
+  //
+  if (mCoffOffset % 4 != 0) {
+    UINT32 Padding = 4 - (mCoffOffset % 4);
+    mCoffFile = realloc(mCoffFile, mCoffOffset + Padding);
+    if (mCoffFile == NULL) {
+      Error (NULL, 0, 4001, "Resource", "memory cannot be allocated for string table padding!");
+      return 0;
+    }
+    memset(mCoffFile + mCoffOffset, 0, Padding);
+    mCoffOffset += Padding;
+  }
+
+  StringTableFileOffset = mCoffOffset;
+
+  //
+  // Expand the COFF file to hold the string table
+  //
+  mCoffFile = realloc(mCoffFile, mCoffOffset + mStringTableSize);
+  if (mCoffFile == NULL) {
+    Error (NULL, 0, 4001, "Resource", "memory cannot be allocated for string table!");
+    return 0;
+  }
+
+  //
+  // Write the string table size as the first 4 bytes
+  //
+  *(UINT32 *)(mCoffFile + mCoffOffset) = mStringTableSize;
+  mCoffOffset += 4;
+
+  //
+  // Copy the string table content (skip the first 4 bytes which are for the size)
+  //
+  if (mStringTableSize > 4) {
+    memcpy(mCoffFile + mCoffOffset, mStringTable + 4, mStringTableSize - 4);
+    mCoffOffset += mStringTableSize - 4;
+  }
+
+  //
+  // Return the file offset where the string table was written.
+  // The caller should update PointerToSymbolTable in the PE/COFF header.
+  //
+  return StringTableFileOffset;
 }
 
 //
@@ -171,6 +276,12 @@ ConvertElf (
 {
   ELF_FUNCTION_TABLE              ElfFunctions;
   UINT8                           EiClass;
+
+  //
+  // Initialize string table
+  //
+  mStringTable = NULL;
+  mStringTableSize = 4;
 
   mFileBufferSize = *FileLength;
   //
@@ -243,11 +354,32 @@ ConvertElf (
   ElfFunctions.SetImageSize ();
 
   //
+  // Write the string table if needed and update the PE header.
+  //
+  if (mStringTable != NULL && mStringTableSize > 4) {
+    UINT32 StringTableOffset;
+    VerboseMsg ("Write string table.");
+    StringTableOffset = CoffWriteStringTable ();
+    if (StringTableOffset != 0) {
+      ElfFunctions.UpdatePeHeaderForStringTable (StringTableOffset);
+    }
+  }
+
+  //
   // Replace.
   //
   free (*FileBuffer);
   *FileBuffer = mCoffFile;
   *FileLength = mCoffOffset;
+
+  //
+  // Free string table resources.
+  //
+  if (mStringTable != NULL) {
+    free (mStringTable);
+    mStringTable = NULL;
+  }
+  mStringTableSize = 4;
 
   //
   // Free resources used by ELF functions.

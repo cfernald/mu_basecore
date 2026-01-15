@@ -26,6 +26,8 @@ extern UINT32 mOutImageType;
 extern UINT32 mFileBufferSize;
 extern BOOLEAN mExportFlag;
 extern BOOLEAN mBuildIdFlag;
+extern CHAR8  *mStringTable;
+extern UINT32 mStringTableSize;
 
 //
 // Common EFI specific data.
@@ -95,6 +97,7 @@ typedef struct {
   VOID    (*WriteDebug) ();
   VOID    (*WriteExport) ();
   VOID    (*SetImageSize) ();
+  VOID    (*UpdatePeHeaderForStringTable) (UINT32 StringTableOffset);
   VOID    (*CleanUp) ();
 
 } ELF_FUNCTION_TABLE;
@@ -120,6 +123,11 @@ CreateSectionHeader (
   UINT32      Offset,
   UINT32      Size,
   UINT32      Flags
+  );
+
+UINT32
+CoffWriteStringTable (
+  VOID
   );
 
 #endif

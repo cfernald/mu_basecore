@@ -64,6 +64,12 @@ SetImageSize32 (
 
 STATIC
 VOID
+UpdatePeHeaderForStringTable32 (
+  UINT32 StringTableOffset
+  );
+
+STATIC
+VOID
 CleanUp32 (
   VOID
   );
@@ -174,6 +180,7 @@ InitializeElf32 (
   ElfFunctions->WriteRelocations = WriteRelocations32;
   ElfFunctions->WriteDebug = WriteDebug32;
   ElfFunctions->SetImageSize = SetImageSize32;
+  ElfFunctions->UpdatePeHeaderForStringTable = UpdatePeHeaderForStringTable32;
   ElfFunctions->CleanUp = CleanUp32;
 
   return TRUE;
@@ -1156,6 +1163,21 @@ SetImageSize32 (
   //
   NtHdr = (EFI_IMAGE_OPTIONAL_HEADER_UNION *)(mCoffFile + mNtHdrOffset);
   NtHdr->Pe32.OptionalHeader.SizeOfImage = mCoffOffset;
+}
+
+STATIC
+VOID
+UpdatePeHeaderForStringTable32 (
+  UINT32 StringTableOffset
+  )
+{
+  EFI_IMAGE_OPTIONAL_HEADER_UNION *NtHdr;
+
+  //
+  // Update PointerToSymbolTable to point to the string table
+  //
+  NtHdr = (EFI_IMAGE_OPTIONAL_HEADER_UNION *)(mCoffFile + mNtHdrOffset);
+  NtHdr->Pe32.FileHeader.PointerToSymbolTable = StringTableOffset;
 }
 
 STATIC

@@ -71,6 +71,12 @@ SetImageSize64 (
 
 STATIC
 VOID
+UpdatePeHeaderForStringTable64 (
+  UINT32 StringTableOffset
+  );
+
+STATIC
+VOID
 CleanUp64 (
   VOID
   );
@@ -222,6 +228,7 @@ InitializeElf64 (
   ElfFunctions->WriteRelocations = WriteRelocations64;
   ElfFunctions->WriteDebug = WriteDebug64;
   ElfFunctions->SetImageSize = SetImageSize64;
+  ElfFunctions->UpdatePeHeaderForStringTable = UpdatePeHeaderForStringTable64;
   ElfFunctions->CleanUp = CleanUp64;
 
   if (mExportFlag) {
@@ -1310,7 +1317,7 @@ ScanSections64 (
   //
   if (mBuildIdFlag) {
     if (mBuildIdFound) {
-      CreateSectionHeader (".bldid", mBuildIdOffset, mRelocOffset - mBuildIdOffset,
+      CreateSectionHeader (".build-id", mBuildIdOffset, mRelocOffset - mBuildIdOffset,
               EFI_IMAGE_SCN_CNT_INITIALIZED_DATA
               | EFI_IMAGE_SCN_MEM_READ);
     } else {
@@ -2436,6 +2443,21 @@ SetImageSize64 (
   //
   NtHdr = (EFI_IMAGE_OPTIONAL_HEADER_UNION *)(mCoffFile + mNtHdrOffset);
   NtHdr->Pe32Plus.OptionalHeader.SizeOfImage = mCoffOffset;
+}
+
+STATIC
+VOID
+UpdatePeHeaderForStringTable64 (
+  UINT32 StringTableOffset
+  )
+{
+  EFI_IMAGE_OPTIONAL_HEADER_UNION *NtHdr;
+
+  //
+  // Update PointerToSymbolTable to point to the string table
+  //
+  NtHdr = (EFI_IMAGE_OPTIONAL_HEADER_UNION *)(mCoffFile + mNtHdrOffset);
+  NtHdr->Pe32Plus.FileHeader.PointerToSymbolTable = StringTableOffset;
 }
 
 STATIC
